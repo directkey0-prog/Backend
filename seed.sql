@@ -3,10 +3,13 @@
 
 -- ============================================
 -- ADMIN USER
--- Password: Admin123! (bcrypt hashed)
+-- Password: Admin123# (bcrypt hashed)
 -- ============================================
 INSERT INTO admins (email, password_hash, full_name) VALUES
-  ('admin@directkey.com', '$2b$10$8K1p/a0dR1xqM.0HYnGJHOzGwYvJeqP3wJnK6vBqxZxm8v0dKzWy2', 'DirectKey Admin');
+  ('directkey0@gmail.com', '$2b$10$Q3s5nxE5AHMFV0R9BiVOt.UTi/tjps/7z3nkysTT5d3H2.sltgLV.', 'DirectKey Admin')
+ON CONFLICT (email) DO UPDATE SET
+  password_hash = EXCLUDED.password_hash,
+  full_name = EXCLUDED.full_name;
 
 -- ============================================
 -- DEFAULT SETTINGS

@@ -4,23 +4,25 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+// Service role client bypasses email confirmation
+const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'directkey-secret-key-2026';
 
 const signup = async (req, res) => {
   const { email, password, full_name, phone, role } = req.body;
   try {
-    const { data, error } = await supabase.auth.signUp({
+    // Use admin client to create user with email auto-confirmed (no verification email needed)
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      options: {
-        data: { full_name, phone, role: role || 'landlord' }
-      }
+      email_confirm: true,
+      user_metadata: { full_name, phone, role: role || 'landlord' },
     });
     if (error) throw error;
 
-    // Also insert into users table
-    const { error: userError } = await supabase
+    // Insert into users table (non-fatal)
+    const { error: userError } = await supabaseAdmin
       .from('users')
       .insert({
         id: data.user.id,
@@ -29,7 +31,7 @@ const signup = async (req, res) => {
         phone_number: phone,
         role: role || 'landlord',
       });
-    if (userError) console.error('User table insert error:', userError);
+    if (userError) console.error('User table insert error:', userError.message);
 
     res.status(201).json({ user: data.user });
   } catch (error) {

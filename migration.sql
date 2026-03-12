@@ -95,10 +95,12 @@ UPDATE properties SET apartment_sub_type = CASE
 END WHERE property_category = 'apartment_type' AND apartment_sub_type IS NULL;
 
 -- Add CHECK constraints
+ALTER TABLE properties DROP CONSTRAINT IF EXISTS properties_property_category_check;
 ALTER TABLE properties
   ADD CONSTRAINT properties_property_category_check
-  CHECK (property_category IS NULL OR property_category IN ('apartment_type', 'land', 'shortlet', 'event_hall', 'office_space'));
+  CHECK (property_category IS NULL OR property_category IN ('apartment_type', 'land', 'shortlet', 'event_hall', 'office_space', 'shop'));
 
+ALTER TABLE properties DROP CONSTRAINT IF EXISTS properties_apartment_sub_type_check;
 ALTER TABLE properties
   ADD CONSTRAINT properties_apartment_sub_type_check
   CHECK (apartment_sub_type IS NULL OR apartment_sub_type IN ('bungalow', 'semi_detached', 'detached', 'duplex', 'penthouse', 'flat', 'terrace', 'mansion', 'villa', 'studio', 'self_contain'));

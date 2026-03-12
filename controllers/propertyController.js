@@ -1,11 +1,14 @@
 const { createClient } = require('@supabase/supabase-js');
+const log = require('../utils/logger');
 require('dotenv').config();
 
+// Use anon key for public reads, service role for writes (bypasses RLS)
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 const getProperties = async (req, res) => {
   try {
-    const { state, lga, area, type, category, sub_type, minPrice, maxPrice } = req.query;
+    const { state, lga, area, type, category, sub_type, minPrice, maxPrice, bedrooms, search, featured } = req.query;
     let query = supabase
       .from('properties')
       .select(`
@@ -23,11 +26,21 @@ const getProperties = async (req, res) => {
     if (sub_type) query = query.eq('apartment_sub_type', sub_type);
     if (minPrice) query = query.gte('price_per_year', minPrice);
     if (maxPrice) query = query.lte('price_per_year', maxPrice);
+    if (bedrooms && bedrooms !== 'Any') {
+      if (String(bedrooms).includes('+')) {
+        query = query.gte('bedrooms', parseInt(bedrooms));
+      } else {
+        query = query.eq('bedrooms', parseInt(bedrooms));
+      }
+    }
+    if (search) query = query.ilike('property_name', `%${search}%`);
+    if (featured === 'true') query = query.limit(6);
 
     const { data, error } = await query;
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    log.error('getProperties', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -46,8 +59,13 @@ const getPropertyById = async (req, res) => {
       .eq('status', 'approved')
       .single();
     if (error) throw error;
+
+    // Increment view count (non-fatal, fire-and-forget)
+    supabaseAdmin.from('properties').update({ views_count: (data.views_count || 0) + 1 }).eq('id', id).then(() => {});
+
     res.json(data);
   } catch (error) {
+    log.error('getPropertyById', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -61,7 +79,17 @@ const createProperty = async (req, res) => {
   } = req.body;
   const landlord_id = req.user.id;
   try {
-    const { data: propertyData, error: propError } = await supabase
+    // Ensure user exists in public users table (prevents FK violation)
+    const meta = req.user.user_metadata || {};
+    await supabaseAdmin.from('users').upsert({
+      id: landlord_id,
+      email: req.user.email,
+      full_name: meta.full_name || req.user.email,
+      phone_number: meta.phone || null,
+      role: meta.role || 'landlord',
+    }, { onConflict: 'id' });
+
+    const { data: propertyData, error: propError } = await supabaseAdmin
       .from('properties')
       .insert({
         property_name,
@@ -90,30 +118,28 @@ const createProperty = async (req, res) => {
       .single();
     if (propError) throw propError;
 
-    // Insert images
     if (images && images.length > 0) {
       const imageInserts = images.map((url, index) => ({
         property_id: propertyData.id,
         image_url: url,
         image_order: index
       }));
-      const { error: imgError } = await supabase
-        .from('property_images')
-        .insert(imageInserts);
-      if (imgError) throw imgError;
+      const { error: imgError } = await supabaseAdmin.from('property_images').insert(imageInserts);
+      if (imgError) log.error('createProperty:images', imgError);
     }
 
     res.status(201).json(propertyData);
   } catch (error) {
+    log.error('createProperty', error);
     res.status(400).json({ error: error.message });
   }
 };
 
 const updateProperty = async (req, res) => {
   const { id } = req.params;
-  const updates = req.body;
+  const { images, ...updates } = req.body;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('properties')
       .update(updates)
       .eq('id', id)
@@ -121,8 +147,22 @@ const updateProperty = async (req, res) => {
       .select()
       .single();
     if (error) throw error;
+
+    // Replace images if provided
+    if (images && images.length > 0) {
+      await supabaseAdmin.from('property_images').delete().eq('property_id', id);
+      const imageInserts = images.map((url, index) => ({
+        property_id: id,
+        image_url: url,
+        image_order: index
+      }));
+      const { error: imgError } = await supabaseAdmin.from('property_images').insert(imageInserts);
+      if (imgError) log.error('updateProperty:images', imgError);
+    }
+
     res.json(data);
   } catch (error) {
+    log.error('updateProperty', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -130,7 +170,8 @@ const updateProperty = async (req, res) => {
 const deleteProperty = async (req, res) => {
   const { id } = req.params;
   try {
-    const { error } = await supabase
+    await supabaseAdmin.from('property_images').delete().eq('property_id', id);
+    const { error } = await supabaseAdmin
       .from('properties')
       .delete()
       .eq('id', id)
@@ -138,22 +179,25 @@ const deleteProperty = async (req, res) => {
     if (error) throw error;
     res.json({ message: 'Property deleted' });
   } catch (error) {
+    log.error('deleteProperty', error);
     res.status(400).json({ error: error.message });
   }
 };
 
 const getLandlordProperties = async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('properties')
       .select(`
         *,
         property_images(image_url, image_order)
       `)
-      .eq('landlord_id', req.user.id);
+      .eq('landlord_id', req.user.id)
+      .order('created_at', { ascending: false });
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    log.error('getLandlordProperties', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -165,15 +209,13 @@ const uploadImages = async (req, res) => {
 
     for (const file of files) {
       const fileName = `${Date.now()}-${file.originalname}`;
-      const { data, error } = await supabase.storage
+      const { data, error } = await supabaseAdmin.storage
         .from('property-images')
-        .upload(fileName, file.buffer, {
-          contentType: file.mimetype,
-        });
+        .upload(fileName, file.buffer, { contentType: file.mimetype });
 
       if (error) throw error;
 
-      const { data: urlData } = supabase.storage
+      const { data: urlData } = supabaseAdmin.storage
         .from('property-images')
         .getPublicUrl(fileName);
 
@@ -182,6 +224,7 @@ const uploadImages = async (req, res) => {
 
     res.json({ urls: uploadedUrls });
   } catch (error) {
+    log.error('uploadImages', error);
     res.status(500).json({ error: error.message });
   }
 };

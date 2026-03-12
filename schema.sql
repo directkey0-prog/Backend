@@ -11,6 +11,9 @@ DROP TABLE IF EXISTS property_images CASCADE;
 DROP TABLE IF EXISTS properties CASCADE;
 DROP TABLE IF EXISTS admins CASCADE;
 DROP TABLE IF EXISTS settings CASCADE;
+DROP TABLE IF EXISTS testimonials CASCADE;
+DROP TABLE IF EXISTS newsletter_subscribers CASCADE;
+DROP TABLE IF EXISTS contact_messages CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
 -- ============================================
@@ -36,7 +39,7 @@ CREATE TABLE properties (
   property_name TEXT NOT NULL,
   description TEXT NOT NULL,
   property_type TEXT,
-  property_category TEXT NOT NULL CHECK (property_category IN ('apartment_type', 'land', 'shortlet', 'event_hall', 'office_space')),
+  property_category TEXT NOT NULL CHECK (property_category IN ('apartment_type', 'land', 'shortlet', 'event_hall', 'office_space', 'shop')),
   apartment_sub_type TEXT CHECK (apartment_sub_type IS NULL OR apartment_sub_type IN ('bungalow', 'semi_detached', 'detached', 'duplex', 'penthouse', 'flat', 'terrace', 'mansion', 'villa', 'studio', 'self_contain')),
   bedrooms INTEGER NOT NULL DEFAULT 0,
   bathrooms INTEGER NOT NULL DEFAULT 0,
@@ -166,17 +169,17 @@ CREATE TABLE contact_messages (
 -- ============================================
 -- INDEXES
 -- ============================================
-CREATE INDEX idx_properties_status ON properties(status);
-CREATE INDEX idx_properties_state ON properties(state);
-CREATE INDEX idx_properties_landlord ON properties(landlord_id);
-CREATE INDEX idx_properties_type ON properties(property_type);
-CREATE INDEX idx_properties_category ON properties(property_category);
-CREATE INDEX idx_properties_sub_type ON properties(apartment_sub_type);
-CREATE INDEX idx_property_images_property ON property_images(property_id);
-CREATE INDEX idx_connections_property ON connections(property_id);
-CREATE INDEX idx_connections_email ON connections(tenant_email);
-CREATE INDEX idx_favorites_email ON favorites(user_email);
-CREATE INDEX idx_favorites_property ON favorites(property_id);
+CREATE INDEX IF NOT EXISTS idx_properties_status ON properties(status);
+CREATE INDEX IF NOT EXISTS idx_properties_state ON properties(state);
+CREATE INDEX IF NOT EXISTS idx_properties_landlord ON properties(landlord_id);
+CREATE INDEX IF NOT EXISTS idx_properties_type ON properties(property_type);
+CREATE INDEX IF NOT EXISTS idx_properties_category ON properties(property_category);
+CREATE INDEX IF NOT EXISTS idx_properties_sub_type ON properties(apartment_sub_type);
+CREATE INDEX IF NOT EXISTS idx_property_images_property ON property_images(property_id);
+CREATE INDEX IF NOT EXISTS idx_connections_property ON connections(property_id);
+CREATE INDEX IF NOT EXISTS idx_connections_email ON connections(tenant_email);
+CREATE INDEX IF NOT EXISTS idx_favorites_email ON favorites(user_email);
+CREATE INDEX IF NOT EXISTS idx_favorites_property ON favorites(property_id);
 
 -- ============================================
 -- ROW LEVEL SECURITY (RLS)
@@ -188,22 +191,27 @@ ALTER TABLE connections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE favorites ENABLE ROW LEVEL SECURITY;
 
 -- Public can read approved properties
+DROP POLICY IF EXISTS "Public can view approved properties" ON properties;
 CREATE POLICY "Public can view approved properties" ON properties
   FOR SELECT USING (status = 'approved');
 
 -- Landlords can manage their own properties
+DROP POLICY IF EXISTS "Landlords manage own properties" ON properties;
 CREATE POLICY "Landlords manage own properties" ON properties
   FOR ALL USING (landlord_id = auth.uid() OR added_by = 'admin');
 
 -- Public can view property images
+DROP POLICY IF EXISTS "Public can view property images" ON property_images;
 CREATE POLICY "Public can view property images" ON property_images
   FOR SELECT USING (TRUE);
 
 -- Anyone can insert connections (payments)
+DROP POLICY IF EXISTS "Anyone can create connections" ON connections;
 CREATE POLICY "Anyone can create connections" ON connections
   FOR INSERT WITH CHECK (TRUE);
 
 -- Users can manage their favorites
+DROP POLICY IF EXISTS "Users manage own favorites" ON favorites;
 CREATE POLICY "Users manage own favorites" ON favorites
   FOR ALL USING (TRUE);
 
@@ -228,8 +236,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS users_updated_at ON users;
 CREATE TRIGGER users_updated_at BEFORE UPDATE ON users
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+DROP TRIGGER IF EXISTS properties_updated_at ON properties;
 CREATE TRIGGER properties_updated_at BEFORE UPDATE ON properties
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();

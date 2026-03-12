@@ -10,6 +10,7 @@ const locationRoutes = require('./routes/locationRoutes');
 const testimonialRoutes = require('./routes/testimonialRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const newsletterRoutes = require('./routes/newsletterRoutes');
+const uploadRoutes = require('./routes/uploadRoutes');
 
 const app = express();
 
@@ -31,5 +32,6 @@ app.use('/api/locations', locationRoutes);
 app.use('/api/testimonials', testimonialRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/newsletter', newsletterRoutes);
+app.use('/api/upload', uploadRoutes);
 
 module.exports = app;

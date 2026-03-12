@@ -8,11 +8,11 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 router.get('/', getProperties);
+router.get('/landlord/my', authMiddleware, roleMiddleware(['landlord']), getLandlordProperties);
 router.get('/:id', getPropertyById);
 router.post('/', authMiddleware, roleMiddleware(['landlord']), createProperty);
 router.put('/:id', authMiddleware, roleMiddleware(['landlord']), updateProperty);
 router.delete('/:id', authMiddleware, roleMiddleware(['landlord']), deleteProperty);
-router.get('/landlord/my', authMiddleware, roleMiddleware(['landlord']), getLandlordProperties);
 router.post('/upload-images', authMiddleware, upload.array('images', 10), uploadImages);
 
 module.exports = router;

@@ -1,11 +1,13 @@
 const { createClient } = require('@supabase/supabase-js');
+const log = require('../utils/logger');
 require('dotenv').config();
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+// Service role client bypasses RLS for all admin operations
+const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 const getAllProperties = async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('properties')
       .select(`
         *,
@@ -15,6 +17,7 @@ const getAllProperties = async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    log.error('getAllProperties', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -22,7 +25,7 @@ const getAllProperties = async (req, res) => {
 const approveProperty = async (req, res) => {
   const { id } = req.params;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('properties')
       .update({ status: 'approved', approved_at: new Date() })
       .eq('id', id)
@@ -31,6 +34,7 @@ const approveProperty = async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    log.error('approveProperty', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -39,7 +43,7 @@ const rejectProperty = async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('properties')
       .update({ status: 'rejected', rejection_reason: reason })
       .eq('id', id)
@@ -48,55 +52,68 @@ const rejectProperty = async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    log.error('rejectProperty', error);
     res.status(400).json({ error: error.message });
   }
 };
 
 const getAllUsers = async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('users')
       .select('*');
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    log.error('getAllUsers', error);
     res.status(400).json({ error: error.message });
   }
 };
 
 const getAllTransactions = async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('connections')
       .select(`
         *,
         properties(property_name, monthly_rent)
-      `);
+      `)
+      .order('payment_date', { ascending: false });
     if (error) throw error;
-    res.json(data);
+
+    // Normalize field names to match frontend expectations
+    const normalized = (data || []).map(c => ({
+      id: c.id,
+      reference: c.payment_reference,
+      tenant_name: c.tenant_name,
+      tenant_email: c.tenant_email,
+      property_name: c.properties?.property_name || 'Unknown Property',
+      amount: parseFloat(c.payment_amount) || 0,
+      status: c.payment_status,
+      date: c.payment_date || c.created_at,
+    }));
+
+    res.json(normalized);
   } catch (error) {
+    log.error('getAllTransactions', error);
     res.status(400).json({ error: error.message });
   }
 };
 
-const getStatistics = async (req, res) => {
+const getStatistics = async (_req, res) => {
   try {
-    const { data: properties, error: propError } = await supabase
-      .from('properties')
-      .select('status');
+    const { data: properties, error: propError } = await supabaseAdmin
+      .from('properties').select('status');
+    const { data: users, error: userError } = await supabaseAdmin
+      .from('users').select('id');
+    const { data: connections, error: connError } = await supabaseAdmin
+      .from('connections').select('payment_amount').eq('payment_status', 'successful');
 
-    const { data: users, error: userError } = await supabase
-      .from('users')
-      .select('id');
+    if (propError) { log.error('getStatistics:properties', propError); throw propError; }
+    if (userError) { log.error('getStatistics:users', userError); throw userError; }
+    if (connError) { log.error('getStatistics:connections', connError); throw connError; }
 
-    const { data: connections, error: connError } = await supabase
-      .from('connections')
-      .select('payment_amount')
-      .eq('payment_status', 'successful');
-
-    if (propError || userError || connError) throw new Error('Statistics error');
-
-    const stats = {
+    res.json({
       totalProperties: properties.length,
       approvedProperties: properties.filter(p => p.status === 'approved').length,
       pendingProperties: properties.filter(p => p.status === 'pending').length,
@@ -104,10 +121,9 @@ const getStatistics = async (req, res) => {
       totalUsers: users.length,
       totalConnections: connections.length,
       totalRevenue: connections.reduce((sum, c) => sum + parseFloat(c.payment_amount), 0)
-    };
-
-    res.json(stats);
+    });
   } catch (error) {
+    log.error('getStatistics', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -119,7 +135,7 @@ const createAdminProperty = async (req, res) => {
     land_area, land_unit, state, local_government, area, amenities, images
   } = req.body;
   try {
-    const { data: propertyData, error: propError } = await supabase
+    const { data: propertyData, error: propError } = await supabaseAdmin
       .from('properties')
       .insert({
         property_name,
@@ -155,11 +171,13 @@ const createAdminProperty = async (req, res) => {
         image_url: url,
         image_order: index,
       }));
-      await supabase.from('property_images').insert(imageInserts);
+      const { error: imgError } = await supabaseAdmin.from('property_images').insert(imageInserts);
+      if (imgError) log.error('createAdminProperty:images', imgError);
     }
 
     res.status(201).json(propertyData);
   } catch (error) {
+    log.error('createAdminProperty', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -167,11 +185,12 @@ const createAdminProperty = async (req, res) => {
 const deleteAdminProperty = async (req, res) => {
   const { id } = req.params;
   try {
-    await supabase.from('property_images').delete().eq('property_id', id);
-    const { error } = await supabase.from('properties').delete().eq('id', id);
+    await supabaseAdmin.from('property_images').delete().eq('property_id', id);
+    const { error } = await supabaseAdmin.from('properties').delete().eq('id', id);
     if (error) throw error;
     res.json({ success: true });
   } catch (error) {
+    log.error('deleteAdminProperty', error);
     res.status(400).json({ error: error.message });
   }
 };

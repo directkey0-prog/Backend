@@ -1,20 +1,21 @@
 const { createClient } = require('@supabase/supabase-js');
+const log = require('../utils/logger');
 require('dotenv').config();
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 // Public: Submit a contact message
 const submitMessage = async (req, res) => {
   const { name, email, phone, subject, message } = req.body;
   try {
-    const { data, error } = await supabase
-      .from('messages')
-      .insert({ name, email, phone, subject, message, is_read: false })
-      .select()
-      .single();
+    const { error } = await supabase
+      .from('contact_messages')
+      .insert({ name, email, phone, subject, message, is_read: false });
     if (error) throw error;
     res.json({ success: true, message: 'Message sent successfully' });
   } catch (error) {
+    log.error('submitMessage', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -22,13 +23,14 @@ const submitMessage = async (req, res) => {
 // Admin: Get all messages
 const getMessages = async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('messages')
+    const { data, error } = await supabaseAdmin
+      .from('contact_messages')
       .select('*')
       .order('created_at', { ascending: false });
     if (error) throw error;
     res.json(data);
   } catch (error) {
+    log.error('getMessages', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -37,13 +39,14 @@ const getMessages = async (req, res) => {
 const markAsRead = async (req, res) => {
   const { id } = req.params;
   try {
-    const { error } = await supabase
-      .from('messages')
+    const { error } = await supabaseAdmin
+      .from('contact_messages')
       .update({ is_read: true })
       .eq('id', id);
     if (error) throw error;
     res.json({ success: true });
   } catch (error) {
+    log.error('markAsRead', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -52,13 +55,14 @@ const markAsRead = async (req, res) => {
 const deleteMessage = async (req, res) => {
   const { id } = req.params;
   try {
-    const { error } = await supabase
-      .from('messages')
+    const { error } = await supabaseAdmin
+      .from('contact_messages')
       .delete()
       .eq('id', id);
     if (error) throw error;
     res.json({ success: true });
   } catch (error) {
+    log.error('deleteMessage', error);
     res.status(400).json({ error: error.message });
   }
 };

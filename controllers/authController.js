@@ -12,42 +12,98 @@ const JWT_SECRET = process.env.JWT_SECRET || 'directkey-secret-key-2026';
 const signup = async (req, res) => {
   const { email, password, full_name, phone, role } = req.body;
   try {
-    // Use admin client to create user with email auto-confirmed (no verification email needed)
+    let authUser;
+
+    // Try to create the user with email auto-confirmed
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
       user_metadata: { full_name, phone, role: role || 'landlord' },
     });
-    if (error) throw error;
 
-    // Insert into users table (non-fatal)
+    if (error) {
+      const msg = error.message || '';
+      // If user already exists in auth, confirm them and update password
+      if (msg.includes('already been registered') || msg.includes('already exists') || error.code === 'email_exists') {
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+        authUser = listData?.users?.find(u => u.email === email);
+        if (!authUser) throw error;
+        await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+          password,
+          email_confirm: true,
+          user_metadata: { full_name, phone, role: role || 'landlord' },
+        });
+      } else {
+        throw error;
+      }
+    } else {
+      authUser = data.user;
+    }
+
+    // Upsert into users table (non-fatal)
     const { error: userError } = await supabaseAdmin
       .from('users')
-      .insert({
-        id: data.user.id,
+      .upsert({
+        id: authUser.id,
         email,
         full_name,
         phone_number: phone,
         role: role || 'landlord',
-      });
-    if (userError) console.error('User table insert error:', userError.message);
+      }, { onConflict: 'id' });
+    if (userError) console.error('User table upsert error:', userError.message);
 
-    res.status(201).json({ user: data.user });
+    res.status(201).json({ user: authUser });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 };
 
+const syncUserToPublicTable = async (authUser) => {
+  const meta = authUser.user_metadata || {};
+  const { error } = await supabaseAdmin.from('users').upsert({
+    id: authUser.id,
+    email: authUser.email,
+    full_name: meta.full_name || authUser.email,
+    phone_number: meta.phone || null,
+    role: meta.role || 'landlord',
+  }, { onConflict: 'id' });
+  if (error) console.error('[users sync error]', error.message);
+};
+
 const login = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-    if (error) throw error;
-    res.json({ user: data.user, session: data.session });
+    let loginData;
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      // Auto-confirm email for users created before confirmation was enforced
+      const msg = error.message || '';
+      if (msg.includes('Email not confirmed') || error.code === 'email_not_confirmed') {
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+        const authUser = listData?.users?.find(u => u.email === email);
+        if (authUser) {
+          await supabaseAdmin.auth.admin.updateUserById(authUser.id, { email_confirm: true });
+          const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({ email, password });
+          if (retryError) throw retryError;
+          loginData = retryData;
+        } else {
+          throw error;
+        }
+      } else {
+        throw error;
+      }
+    } else {
+      loginData = data;
+    }
+
+    // Ensure user exists in public users table (fixes FK constraint on property creation)
+    if (loginData?.user) {
+      syncUserToPublicTable(loginData.user).catch(() => {});
+    }
+
+    res.json({ user: loginData.user, session: loginData.session });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -94,6 +150,19 @@ const adminLogin = async (req, res) => {
   }
 };
 
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password`,
+    });
+    if (error) throw error;
+    res.json({ message: 'Password reset email sent' });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
 const logout = async (req, res) => {
   try {
     const { error } = await supabase.auth.signOut();
@@ -104,4 +173,4 @@ const logout = async (req, res) => {
   }
 };
 
-module.exports = { signup, login, adminLogin, logout };
+module.exports = { signup, login, adminLogin, forgotPassword, logout };

@@ -8,5 +8,4 @@ router.post('/admin/login', adminLogin);
 router.post('/forgot-password', forgotPassword);
 router.post('/logout', logout);
 
-
 module.exports = router;

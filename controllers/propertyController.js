@@ -34,6 +34,7 @@ const getProperties = async (req, res) => {
       }
     }
     if (search) query = query.ilike('property_name', `%${search}%`);
+    query = query.order('created_at', { ascending: false });
     if (featured === 'true') query = query.limit(6);
 
     const { data, error } = await query;

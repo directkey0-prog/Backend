@@ -9,11 +9,8 @@ const getAllProperties = async (req, res) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('properties')
-      .select(`
-        *,
-        property_images(image_url),
-        users(full_name, email)
-      `);
+      .select('*, property_images(image_url)')
+      .order('created_at', { ascending: false });
     if (error) throw error;
     res.json(data);
   } catch (error) {

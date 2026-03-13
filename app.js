@@ -14,8 +14,29 @@ const uploadRoutes = require('./routes/uploadRoutes');
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// ── CORS ───────────────────────────────────────────────────────────────────
+// Localhost origins always allowed; add production origins via .env
+const allowedOrigins = [
+  'http://localhost:5173', // Frontend
+  'http://localhost:5174', // Landlord
+  'http://localhost:5175', // Admin
+  process.env.FRONTEND_URL,
+  process.env.LANDLORD_URL,
+  process.env.ADMIN_URL,
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman, server-to-server)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+}));
+
 app.use(express.json());
 
 // File upload middleware

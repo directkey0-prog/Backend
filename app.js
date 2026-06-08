@@ -17,9 +17,14 @@ const app = express();
 // ── CORS ───────────────────────────────────────────────────────────────────
 // Localhost origins always allowed; add production origins via .env
 const allowedOrigins = [
-  'http://localhost:5173', // Frontend
-  'http://localhost:5174', // Landlord
-  'http://localhost:5175', // Admin
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'http://localhost:5176',
+  'https://directkey.ng',
+  'https://www.directkey.ng',
+  'https://landlord.directkey.ng',
+  'https://admin.directkey.ng',
   process.env.FRONTEND_URL,
   process.env.LANDLORD_URL,
   process.env.ADMIN_URL,
@@ -40,6 +45,8 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
 // File upload middleware
 const upload = multer({ storage: multer.memoryStorage() });

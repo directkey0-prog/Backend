@@ -151,13 +151,31 @@ const adminLogin = async (req, res) => {
 };
 
 const forgotPassword = async (req, res) => {
-  const { email } = req.body;
+  const { email, redirectTo } = req.body;
+  const resetUrl = redirectTo || `${process.env.LANDLORD_URL || 'http://localhost:5174'}/reset-password`;
   try {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password`,
+      redirectTo: resetUrl,
     });
     if (error) throw error;
     res.json({ message: 'Password reset email sent' });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+const resetPassword = async (req, res) => {
+  const { access_token, refresh_token, new_password } = req.body;
+  if (!access_token || !refresh_token || !new_password) {
+    return res.status(400).json({ error: 'access_token, refresh_token and new_password are required' });
+  }
+  try {
+    const userClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+    const { error: sessionError } = await userClient.auth.setSession({ access_token, refresh_token });
+    if (sessionError) throw sessionError;
+    const { error: updateError } = await userClient.auth.updateUser({ password: new_password });
+    if (updateError) throw updateError;
+    res.json({ message: 'Password updated successfully' });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -173,4 +191,4 @@ const logout = async (req, res) => {
   }
 };
 
-module.exports = { signup, login, adminLogin, forgotPassword, logout };
+module.exports = { signup, login, adminLogin, forgotPassword, resetPassword, logout };

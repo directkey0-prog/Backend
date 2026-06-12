@@ -154,10 +154,28 @@ const forgotPassword = async (req, res) => {
   const { email, redirectTo } = req.body;
   const resetUrl = redirectTo || `${process.env.LANDLORD_URL || 'http://localhost:5174'}/reset-password`;
   try {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: resetUrl,
+    // Generate the reset link without Supabase sending any email
+    const { data, error } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'recovery',
+      email,
+      options: { redirectTo: resetUrl },
     });
     if (error) throw error;
+
+    const resetLink = data?.properties?.action_link;
+    if (!resetLink) throw new Error('Could not generate reset link');
+
+    // Send branded email via Google Apps Script
+    const scriptUrl = process.env.GOOGLE_SCRIPT_URL;
+    if (scriptUrl) {
+      const axios = require('axios');
+      await axios.post(scriptUrl, {
+        type: 'password_reset',
+        to_email: email,
+        reset_link: resetLink,
+      }).catch(() => {});
+    }
+
     res.json({ message: 'Password reset email sent' });
   } catch (error) {
     res.status(400).json({ error: error.message });

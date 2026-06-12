@@ -90,6 +90,7 @@ const verifyPayment = async (req, res) => {
       payment_amount: txData.amount / 100,
       payment_status: 'successful',
       paystack_reference: reference,
+      payment_date: new Date().toISOString(),
     }, { onConflict: 'payment_reference' });
   } catch (err) {
     log.error('verifyPayment:insert', err);

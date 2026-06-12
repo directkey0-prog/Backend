@@ -71,11 +71,8 @@ const getAllTransactions = async (req, res) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('connections')
-      .select(`
-        *,
-        properties(property_name, monthly_rent)
-      `)
-      .order('payment_date', { ascending: false });
+      .select(`*, properties(property_name)`)
+      .order('created_at', { ascending: false });
     if (error) throw error;
 
     // Normalize field names to match frontend expectations
@@ -87,7 +84,7 @@ const getAllTransactions = async (req, res) => {
       property_name: c.properties?.property_name || 'Unknown Property',
       amount: parseFloat(c.payment_amount) || 0,
       status: c.payment_status,
-      date: c.payment_date || c.created_at,
+      date: c.payment_date || c.created_at || new Date().toISOString(),
     }));
 
     res.json(normalized);

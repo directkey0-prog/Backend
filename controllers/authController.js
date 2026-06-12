@@ -164,6 +164,39 @@ const forgotPassword = async (req, res) => {
   }
 };
 
+const updateProfile = async (req, res) => {
+  const { full_name, phone } = req.body;
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    await supabaseAdmin.auth.admin.updateUserById(userId, {
+      user_metadata: { full_name, phone },
+    });
+    await supabaseAdmin.from('users').update({ full_name, phone_number: phone }).eq('id', userId);
+    res.json({ message: 'Profile updated successfully' });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+const changePassword = async (req, res) => {
+  const { current_password, new_password } = req.body;
+  const userId = req.user?.id;
+  const userEmail = req.user?.email;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    // Verify current password
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: userEmail, password: current_password });
+    if (signInError) return res.status(400).json({ error: 'Current password is incorrect' });
+    // Update to new password
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: new_password });
+    if (updateError) throw updateError;
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
 const resetPassword = async (req, res) => {
   const { access_token, refresh_token, new_password } = req.body;
   if (!access_token || !refresh_token || !new_password) {
@@ -191,4 +224,4 @@ const logout = async (req, res) => {
   }
 };
 
-module.exports = { signup, login, adminLogin, forgotPassword, resetPassword, logout };
+module.exports = { signup, login, adminLogin, forgotPassword, resetPassword, updateProfile, changePassword, logout };

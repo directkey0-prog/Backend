@@ -192,4 +192,23 @@ const deleteAdminProperty = async (req, res) => {
   }
 };
 
-module.exports = { getAllProperties, approveProperty, rejectProperty, getAllUsers, getAllTransactions, getStatistics, createAdminProperty, deleteAdminProperty };
+const changeAdminPassword = async (req, res) => {
+  const { current_password, new_password } = req.body;
+  const adminEmail = req.user?.email;
+  try {
+    const { data: admin, error } = await supabaseAdmin.from('admins').select('*').eq('email', adminEmail).single();
+    if (error || !admin) return res.status(404).json({ error: 'Admin not found' });
+    const bcrypt = require('bcryptjs');
+    const valid = await bcrypt.compare(current_password, admin.password_hash);
+    if (!valid) return res.status(400).json({ error: 'Current password is incorrect' });
+    const hash = await bcrypt.hash(new_password, 10);
+    const { error: updateError } = await supabaseAdmin.from('admins').update({ password_hash: hash }).eq('email', adminEmail);
+    if (updateError) throw updateError;
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    log.error('changeAdminPassword', error);
+    res.status(400).json({ error: error.message });
+  }
+};
+
+module.exports = { getAllProperties, approveProperty, rejectProperty, getAllUsers, getAllTransactions, getStatistics, createAdminProperty, deleteAdminProperty, changeAdminPassword };

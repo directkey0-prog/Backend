@@ -1,5 +1,5 @@
 const express = require('express');
-const { getAllProperties, approveProperty, rejectProperty, getAllUsers, getAllTransactions, getStatistics, createAdminProperty, deleteAdminProperty } = require('../controllers/adminController');
+const { getAllProperties, approveProperty, rejectProperty, getAllUsers, getAllTransactions, getStatistics, createAdminProperty, deleteAdminProperty, changeAdminPassword } = require('../controllers/adminController');
 const { getAllTestimonials, createTestimonial, updateTestimonial, deleteTestimonial } = require('../controllers/testimonialController');
 const { getMessages, markAsRead, deleteMessage } = require('../controllers/messageController');
 const { getSubscribers, removeSubscriber } = require('../controllers/newsletterController');
@@ -35,6 +35,9 @@ router.delete('/testimonials/:id', deleteTestimonial);
 router.get('/messages', getMessages);
 router.put('/messages/:id/read', markAsRead);
 router.delete('/messages/:id', deleteMessage);
+
+// Admin account
+router.put('/change-password', changeAdminPassword);
 
 // Newsletter
 router.get('/newsletter/subscribers', getSubscribers);

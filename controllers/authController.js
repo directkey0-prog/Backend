@@ -165,12 +165,11 @@ const forgotPassword = async (req, res) => {
     const resetLink = data?.properties?.action_link;
     if (!resetLink) throw new Error('Could not generate reset link');
 
-    // Send branded email via Google Apps Script
-    const scriptUrl = process.env.GOOGLE_SCRIPT_URL;
-    if (scriptUrl) {
+    // Send branded email via dedicated reset Apps Script
+    const resetScriptUrl = process.env.GOOGLE_RESET_URL || process.env.GOOGLE_SCRIPT_URL;
+    if (resetScriptUrl) {
       const axios = require('axios');
-      await axios.post(scriptUrl, {
-        type: 'password_reset',
+      await axios.post(resetScriptUrl, {
         to_email: email,
         reset_link: resetLink,
       }).catch(() => {});
@@ -242,4 +241,16 @@ const logout = async (req, res) => {
   }
 };
 
-module.exports = { signup, login, adminLogin, forgotPassword, resetPassword, updateProfile, changePassword, logout };
+const refreshToken = async (req, res) => {
+  const { refresh_token } = req.body;
+  if (!refresh_token) return res.status(400).json({ error: 'refresh_token required' });
+  try {
+    const { data, error } = await supabase.auth.refreshSession({ refresh_token });
+    if (error) throw error;
+    res.json({ session: data.session, user: data.user });
+  } catch (error) {
+    res.status(401).json({ error: error.message });
+  }
+};
+
+module.exports = { signup, login, adminLogin, forgotPassword, resetPassword, updateProfile, changePassword, logout, refreshToken };

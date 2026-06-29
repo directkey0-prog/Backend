@@ -26,6 +26,11 @@ const notifyViaGoogleScript = async (payload) => {
 
 // ─── Controllers ──────────────────────────────────────────────────────────
 
+// Channels confirmed working on the live Paystack account.
+// 'bank' (direct bank debit) is excluded — it requires separate Paystack
+// compliance activation and currently fails for customers who select it.
+const PAYSTACK_CHANNELS = ['card', 'bank_transfer', 'ussd', 'opay'];
+
 const initializePayment = async (req, res) => {
   try {
     const { email, amount, propertyId, tenantName } = req.body;
@@ -34,6 +39,7 @@ const initializePayment = async (req, res) => {
       {
         email,
         amount,
+        channels: PAYSTACK_CHANNELS,
         metadata: { propertyId, tenantName },
         callback_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}`,
       },

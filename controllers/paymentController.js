@@ -87,20 +87,17 @@ const verifyPayment = async (req, res) => {
     'the property';
 
   // Step 2: Record connection in Supabase (service role — bypasses RLS)
-  try {
-    await supabaseAdmin.from('connections').upsert({
-      property_id: propertyId || null,
-      tenant_email: resolvedEmail,
-      tenant_name: resolvedName,
-      payment_reference: reference,
-      payment_amount: txData.amount / 100,
-      payment_status: 'successful',
-      paystack_reference: reference,
-      payment_date: new Date().toISOString(),
-    }, { onConflict: 'payment_reference' });
-  } catch (err) {
-    log.error('verifyPayment:insert', err);
-  }
+  const { error: insertError } = await supabaseAdmin.from('connections').upsert({
+    property_id: propertyId || null,
+    tenant_email: resolvedEmail,
+    tenant_name: resolvedName,
+    payment_reference: reference,
+    payment_amount: txData.amount / 100,
+    payment_status: 'successful',
+    paystack_reference: reference,
+    payment_date: new Date().toISOString(),
+  }, { onConflict: 'payment_reference' });
+  if (insertError) log.error('verifyPayment:insert', insertError);
 
   // Step 3: Get landlord details
   let landlordContact = null;

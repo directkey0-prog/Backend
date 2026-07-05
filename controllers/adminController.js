@@ -72,7 +72,7 @@ const getAllTransactions = async (req, res) => {
     const { data, error } = await supabaseAdmin
       .from('connections')
       .select(`*, properties(property_name)`)
-      .order('created_at', { ascending: false });
+      .order('payment_date', { ascending: false });
     if (error) throw error;
 
     // Normalize field names to match frontend expectations

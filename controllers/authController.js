@@ -112,8 +112,8 @@ const login = async (req, res) => {
 const adminLogin = async (req, res) => {
   const { email, password } = req.body;
   try {
-    // Look up admin in the admins table
-    const { data: admin, error } = await supabase
+    // Look up admin in the admins table (service role — bypasses RLS)
+    const { data: admin, error } = await supabaseAdmin
       .from('admins')
       .select('*')
       .eq('email', email)
